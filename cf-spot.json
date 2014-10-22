@@ -369,8 +369,8 @@
 							"\n\n",
 							"# download the setup and config files \n",
 							"cd /var/data \n",
-							"git clone https://github.com/indeedeng/imhotep-aws-config.git \n",
-							"cd imhotep-aws-config/imhotep \n",
+							"git clone https://github.com/indeedeng/imhotep-cloudformation.git \n",
+							"cd imhotep-cloudformation/imhotep \n",
 							"\n\n",
 							"# run the setup script \n",
 							"./setup.sh \n",
@@ -407,10 +407,10 @@
 						"yum" : { "git" : []}
 					},
 					"files" : {
-						"/tmp/imhotep-server-1.0.3-SNAPSHOT-complete.tar.gz" : {
+						"/tmp/imhotep-server-1.0.10-SNAPSHOT-complete.tar.gz" : {
 							"source" : {
 								"Fn::Join" : [
-									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "imhotep-server-1.0.3-SNAPSHOT-complete.tar.gz" ]
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "imhotep-server-1.0.10-SNAPSHOT-complete.tar.gz" ]
 								]
 							},
 							"authentication" : "imhotepExecutables"
@@ -635,23 +635,23 @@
 							"\n\n",
 							"# download the setup and config files \n",
 							"cd /var/data \n",
-							"git clone https://github.com/indeedeng/imhotep-aws-config.git \n",
-							"cd imhotep-aws-config/iql \n",
+							"git clone https://github.com/indeedeng/imhotep-cloudformation.git \n",
+							"cd imhotep-cloudformation/iql \n",
 							"cat crontab >> /etc/crontab \n",
 							"cp catalina.properties /etc/tomcat7 \n",
-							"cd /var/data/imhotep-aws-config/iupload \n",
+							"cd /var/data/imhotep-cloudformation/iupload \n",
 							"cp server.xml /etc/tomcat7 \n",
 							"\n\n",
-							"# unpack imhotep shard builder \n",
-							"cd /opt/imhotepShardBuilder \n",
-							"chown shardbuilder /opt/imhotepShardBuilder \n",
-							"tar xzf imhotepShardBuilder.tar.gz \n",
-							"ln -s /opt/imhotepShardBuilder/imhotep-tsv-builder-*-SNAPSHOT /opt/imhotepShardBuilder/shardBuilder \n",
-							"mkdir /opt/imhotepShardBuilder/conf \n",
-							"chown shardbuilder /opt/imhotepShardBuilder/conf \n",
-							"cp /opt/tomcat_shared/core-site.xml /opt/imhotepShardBuilder/conf \n",
-							"mkdir /opt/imhotepShardBuilder/logs \n",
-							"chown shardbuilder /opt/imhotepShardBuilder/logs \n",
+							"# unpack imhotep tsv converter \n",
+							"cd /opt/imhotepTsvConverter \n",
+							"chown shardbuilder /opt/imhotepTsvConverter \n",
+							"tar xzf imhotepTsvConverter.tar.gz \n",
+							"ln -s /opt/imhotepTsvConverter/tsv-builder-* /opt/imhotepTsvConverter/shardBuilder \n",
+							"mkdir /opt/imhotepTsvConverter/conf \n",
+							"chown shardbuilder /opt/imhotepTsvConverter/conf \n",
+							"cp /opt/tomcat_shared/core-site.xml /opt/imhotepTsvConverter/conf \n",
+							"mkdir /opt/imhotepTsvConverter/logs \n",
+							"chown shardbuilder /opt/imhotepTsvConverter/logs \n",
 							"mkdir /var/data/build \n",
 							"chmod go+w /var/data/build \n",
 							"\n\n",
@@ -702,7 +702,7 @@
 						"/opt/iql/iql.war" : {
 							"source" : {
 								"Fn::Join" : [
-									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "iql.war" ]
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "iql-1.0.5-SNAPSHOT.war" ]
 								]
 							},
 							"authentication" : "imhotepExecutables"
@@ -710,15 +710,15 @@
 						"/opt/iupload/iupload.war" : {
 							"source" : {
 								"Fn::Join" : [
-									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "iupload.war" ]
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "iupload-war-1.0.1-SNAPSHOT.war" ]
 								]
 							},
 							"authentication" : "imhotepExecutables"
 						},
-						"/opt/imhotepShardBuilder/imhotepShardBuilder.tar.gz" : {
+						"/opt/imhotepTsvConverter/imhotepTsvConverter.tar.gz" : {
 							"source" : {
 								"Fn::Join" : [
-									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "imhotep-tsv-builder-1.0.0-SNAPSHOT-complete.tar.gz" ]
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "tsv-builder-1.0.0-complete.tar.gz" ]
 								]
 							},
 							"authentication" : "imhotepExecutables"
@@ -756,14 +756,14 @@
 								]
 							}
 						},
-						"/opt/imhotepShardBuilder/shardBuilder.sh" : {
+						"/opt/imhotepTsvConverter/tsvConverter.sh" : {
 							"content" : { "Fn::Join" : [ 
 								" ", [
 									"#!/bin/bash",
 									"\n\n",
-									"lockfile -r 0 /tmp/shardBuilder.lock || exit 1",
+									"lockfile -r 0 /tmp/tsvConverter.lock || exit 1",
 									"\n\n",
-									"export CLASSPATH=\"/opt/imhotepShardBuilder/shardBuilder/lib/*:/opt/imhotepShardBuilder/conf:\"$CLASSPATH",
+									"export CLASSPATH=\"/opt/imhotepTsvConverter/shardBuilder/lib/*:/opt/imhotepTsvConverter/conf:\"$CLASSPATH",
 									"\n\n",
 									"java",
 									{ "Fn::Join" : [ "", [
@@ -790,7 +790,7 @@
 									"--build-loc /var/data/build",
 									"\n\n",
 									"# Remove the lockfile \n",
-									"rm -f /tmp/shardBuilder.lock",
+									"rm -f /tmp/tsvConverter.lock",
 									"\n\n"
 									]
 								]
