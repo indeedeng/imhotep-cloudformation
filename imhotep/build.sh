@@ -21,5 +21,5 @@ cp /tmp/imhotep*.tar.gz /var/data/imhotep/source/target
 # unpack imhotep
 cd /opt/imhotep
 tar xzf /var/data/imhotep/source/target/imhotep-server*.tar.gz 
-ln -s /opt/imhotep/imhotep-server-*-SNAPSHOT /opt/imhotep/imhotep-server
+ln -s /opt/imhotep/imhotep-server-* /opt/imhotep/imhotep-server
 
