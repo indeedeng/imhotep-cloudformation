@@ -24,13 +24,13 @@ alternatives --install /usr/bin/java java /usr/java/jdk1.7.0_55/jre/bin/java 200
 easy_install supervisor
 
 # copy supervisor config files
-cp /var/data/imhotep-aws-config/supervisor/supervisord.conf /etc
+cp /var/data/imhotep-cloudformation/supervisor/supervisord.conf /etc
 mkdir /opt/supervisor
-cp /var/data/imhotep-aws-config/supervisor/imhotep.conf /opt/supervisor
+cp /var/data/imhotep-cloudformation/supervisor/imhotep.conf /opt/supervisor
 chmod a+rw /opt/supervisor
 
 # set up init.d entry for supervisor
-cp /var/data/imhotep-aws-config/supervisor/supervisor.init.sh /etc/rc.d/init.d/supervisor
+cp /var/data/imhotep-cloudformation/supervisor/supervisor.init.sh /etc/rc.d/init.d/supervisor
 chmod a+x /etc/rc.d/init.d/supervisor
 chkconfig --level 345 supervisor on
 
@@ -51,7 +51,7 @@ chgrp imhotep /var/tempFS
 mount -t tmpfs -o size=10g tmpfs /var/tempFS
 
 # copy imhotep files
-cp /var/data/imhotep-aws-config/imhotep/log4j.xml /opt/imhotep/
+cp /var/data/imhotep-cloudformation/imhotep/log4j.xml /opt/imhotep/
 
 
 # start imhotep 
