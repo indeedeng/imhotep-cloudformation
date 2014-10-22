@@ -1,0 +1,894 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "Script for spinning up an Imhotep cluster",
+
+  "Parameters" : {
+
+	"InstanceType" : {
+	  "Description" : "Imhotep EC2 instance type",
+	  "Type" : "String",
+	  "Default" : "r3.2xlarge",
+	  "AllowedValues" : [ 
+						"m3.xlarge", 
+						"m3.2xlarge", 
+						"c3.2xlarge", 
+						"c3.4xlarge", 
+						"c3.8xlarge",
+						"r3.large", 
+						"r3.xlarge", 
+						"r3.2xlarge", 
+						"r3.4xlarge", 
+						"r3.8xlarge"
+						],
+	  "ConstraintDescription" : "must be a valid EC2 instance type."
+	},
+
+	"NumImhotepInstances" : {
+		"Description" : "Number of Imhotep instances to spawn",
+		"Type" : "String",
+		"Default" : "2",
+		"AllowedPattern" : "[0-9]*"
+	},
+
+	"KeyName": {
+	  "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+	  "Type": "String",
+	  "MinLength": "1",
+	  "MaxLength": "255",
+	  "AllowedPattern" : "[\\x20-\\x7E]*",
+	  "ConstraintDescription" : "can contain only ASCII characters."
+	},
+
+	"IndexBucket" : {
+	  "Description" : "Bucket containing imhotep indexes",
+	  "Type" : "String"
+	},
+
+	"BuildBucket" : {
+	  "Description" : "Bucket to upload tsv data to",
+	  "Type" : "String"
+	},
+
+	"DownloadBucket" : {
+	  "Description" : "Bucket containing imhotep jars. Indeed provided jars are in \"indeed-imhotep-downloads\".",
+	  "Type" : "String",
+	  "Default" : "indeed-imhotep-downloads"
+	},
+
+	"IPrange": {
+	  "Description" : "IP range for computers allowed to access imhotep (ie. office external ip range)",
+	  "Type": "String",
+	  "MinLength": "9",
+	  "MaxLength": "21",
+	  "AllowedPattern" : "[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}/[0-9]{1,5}",
+	  "ConstraintDescription" : "Must be a valid IP CIDR range of the form x.x.x.x/x."
+	},
+
+	"SSHLocation" : {
+	  "Description" : " The IP address range that can be used to SSH to the EC2 instances",
+	  "Type": "String",
+	  "MinLength": "9",
+	  "MaxLength": "18",
+	  "Default": "0.0.0.0/0",
+	  "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+	  "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+	}
+  },
+
+  "Mappings" : {
+	"InstanceTypeInfo" : {
+		"m1.small"   : { "Arch" : "64", "MaxInstancePartitionSize" : "160000", "MaxInstanceHeap" : "0" },
+		"m3.large"   : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "32000", "MaxInstanceHeap" : "0" },
+		"m3.xlarge"  : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "40000", "MaxInstanceHeap" : "5" },
+		"m3.2xlarge" : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "80000", "MaxInstanceHeap" : "20" },
+		"c3.large"   : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "16000", "MaxInstanceHeap" : "0" },
+		"c3.xlarge"  : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "40000", "MaxInstanceHeap" : "0" },
+		"c3.2xlarge" : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "80000", "MaxInstanceHeap" : "5" },
+		"c3.4xlarge" : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "160000", "MaxInstanceHeap" : "20" },
+		"c3.8xlarge" : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "320000", "MaxInstanceHeap" : "50" },
+		"r3.large"   : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "32000", "MaxInstanceHeap" : "5" },
+		"r3.xlarge"  : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "80000", "MaxInstanceHeap" : "20" },
+		"r3.2xlarge" : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "160000", "MaxInstanceHeap" : "50" },
+		"r3.4xlarge" : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "320000", "MaxInstanceHeap" : "100" },
+		"r3.8xlarge" : { "Arch" : "64HVM", "MaxInstancePartitionSize" : "320000", "MaxInstanceHeap" : "200" }
+	 },
+
+	 "AWSRegionArch2AMI" : {
+		"us-east-1"	: { "64HVM" : "ami-318d9158", "64" : "ami-ed8e9284" },
+		"us-west-2"	: { "64HVM" : "ami-a4254f94", "64" : "ami-363a5006" },
+		"us-west-1"	: { "64HVM" : "ami-90bb82d5", "64" : "ami-6cba8329" },
+		"eu-west-1"	: { "64HVM" : "ami-ad19e2da", "64" : "ami-0318e374" },
+		"ap-singapore"	: { "64HVM" : "ami-b60d5ee4", "64" : "ami-4e0c5f1c" },
+		"ap-sydney"	: { "64HVM" : "ami-174bd32d", "64" : "ami-094bd333" },
+		"ap-tokyo"	: { "64HVM" : "ami-07562f06", "64" : "ami-c1562fc0" },
+		"sa-east-1"	: { "64HVM" : "ami-ff5cfee2", "64" : "ami-4d5dff50" }
+	 }
+  },
+
+  "Resources" : { 
+
+	"CfnUser": {
+		"Type": "AWS::IAM::User",
+		"DependsOn" : "CacheBucket",
+		"Properties": {
+			"Path": "/imhotep-users/",
+			"Policies": [
+				{
+					"PolicyName": "root",
+					"PolicyDocument": {
+						"Statement": [
+							{
+								"Effect": "Allow",
+								"Action": [
+									"s3:GetObject",
+									"s3:PutObject",
+									"s3:DeleteObject"
+								],
+								"Resource": [
+									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "IndexBucket" }, "/*"]]}
+								]
+							},
+							{
+								"Effect": "Allow",
+								"Action": [
+									"s3:ListBucket"
+								],
+								"Resource": [
+									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "IndexBucket" }]]}
+								]
+							},
+							{
+								"Effect": "Allow",
+								"Action": [
+									"s3:GetObject",
+									"s3:PutObject",
+									"s3:DeleteObject"
+								],
+								"Resource": [
+									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "BuildBucket" }, "/*"]]}
+								]
+							},
+							{
+								"Effect": "Allow",
+								"Action": [
+									"s3:ListBucket"
+								],
+								"Resource": [
+									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "BuildBucket" }]]}
+								]
+							},
+							{
+								"Effect": "Allow",
+								"Action": [
+									"s3:GetObject",
+									"s3:PutObject",
+									"s3:DeleteObject"
+								],
+								"Resource": [
+									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "CacheBucket" }, "/*"]]}
+								]
+							},
+							{
+								"Effect": "Allow",
+								"Action": [
+									"s3:ListBucket"
+								],
+								"Resource": [
+									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "CacheBucket" }]]}
+								]
+							},
+							{
+								"Effect": "Allow",
+								"Action": [
+									"s3:GetObject",
+									"s3:ListBucket"
+								],
+								"Resource": [
+									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "DownloadBucket" }]]},
+									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "DownloadBucket" }, "/*"]]}
+								]
+							},
+							{
+								"Effect": "Allow",
+								"Action": [
+									"ec2:AllocateAddress",
+									"ec2:AssociateAddress",
+									"ec2:DescribeAddresses",
+									"ec2:DisassociateAddress"
+								],
+								"Resource": [ "*" ]
+							}
+						]
+					}
+				}
+			]
+		}
+	},
+
+	"CfnKeys": {
+		"Type": "AWS::IAM::AccessKey",
+		"Properties": {
+			"UserName": {
+				"Ref": "CfnUser"
+			}
+		}
+	},
+
+	"CacheBucket": {
+		"Type": "AWS::S3::Bucket",
+		"Properties": {
+			"AccessControl": "Private"
+		},
+		"DeletionPolicy" : "Delete"
+	},
+
+
+	"ZookeeperInstance" : {
+		"Type" : "AWS::EC2::Instance",
+		"Properties" : {
+			"SecurityGroups" : [ { "Ref" : "SshAccessSecurityGroup" }, "default" ],
+			"KeyName" : { "Ref" : "KeyName" },
+			"ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
+					{ "Fn::FindInMap" : [ "InstanceTypeInfo", "r3.large", "Arch" ] } ] 
+					},
+			"InstanceType" : "r3.large",
+			"Tags" : [ {
+				"Key" : "Name",
+				"Value" : "Zookeeper Instance"
+			} ],
+			"UserData": {
+				"Fn::Base64": {
+					"Fn::Join": [
+						"", [
+							"#!/bin/bash -v \n",
+							"# update packages \n",
+							"yum update -y \n",
+							"\n",
+							"/opt/aws/bin/cfn-init -s ", 
+							{ "Ref" : "AWS::StackName" },
+							"    -r ZookeeperInstance ",
+							"    --region ", 
+							{ "Ref" : "AWS::Region" }, 
+							"\n \n",
+							"# format and mount the instance storage \n",
+							"umount /media/ephemeral0/ \n",
+							"mkfs.ext4 -m 1 -O dir_index,extent,sparse_super /dev/xvdb \n",
+							"mkdir /var/data \n",
+							"mount -t ext4 /dev/xvdb /var/data \n",
+							"\n",
+							"# download the oracle java 7 rpm \n",
+							"wget --no-cookies --no-check-certificate ",
+							"    --header 'Cookie: oraclelicense=accept-securebackup-cookie' ",
+							"    'http://download.oracle.com/otn-pub/java/jdk/7u55-b13/jdk-7u55-linux-x64.rpm'",
+							"\n\n",
+							"yum localinstall -y jdk-7u55-linux-x64.rpm \n",
+							"\n\n",
+							"# update java alternatives\n",
+							"alternatives --install /usr/bin/java java /usr/java/jdk1.7.0_55/jre/bin/java 20000 ",
+							"         --slave /usr/bin/keytool keytool /usr/java/jdk1.7.0_55/jre/bin/keytool ",
+							"         --slave /usr/bin/orbd orbd /usr/java/jdk1.7.0_55/jre/bin/orbd ",
+							"         --slave /usr/bin/pack2000 pack2000 /usr/java/jdk1.7.0_55/jre/bin/pack200 ",
+							"         --slave /usr/bin/rmid rmid /usr/java/jdk1.7.0_55/jre/bin/rmid ",
+							"         --slave /usr/bin/rmiregistry rmiregistry /usr/java/jdk1.7.0_55/jre/bin/rmiregistry ",
+							"         --slave /usr/bin/servertool servertool /usr/java/jdk1.7.0_55/jre/bin/servertool ",
+							"         --slave /usr/bin/tnameserv tnameserv /usr/java/jdk1.7.0_55/jre/bin/tnameserv ",
+							"         --slave /usr/bin/unpack2000 unpack2000 /usr/java/jdk1.7.0_55/jre/bin/unpack200",
+							"\n\n",
+							"# unpack zookeeper \n",
+							"cd /opt \n",
+							"tar xzf /tmp/zookeeper.tar.gz \n",
+							"ln -s zookeeper-3.4.5-cdh4.4.0 zookeeper \n",
+							"\n",
+							"# set up zookeeper configuration \n",
+							"mkdir /var/zookeeper_snapshots \n",
+							"mv /tmp/zoo.cfg /opt/zookeeper/conf \n",
+							"\n",
+							"# start zookeeper \n",
+							"mkdir /var/data/zookeeper \n",
+							"cd /var/data/zookeeper \n",
+							"/opt/zookeeper/bin/zkServer.sh start \n",
+							"\n\n"
+						]
+					]
+				}
+			}
+		},
+		"Metadata" : {
+			"AWS::CloudFormation::Init" : {
+				"config" : {
+					"packages" : { "yum" : { "git" : []} },
+					"files" : {
+						"/tmp/zookeeper.tar.gz" : { "source" : "http://archive.cloudera.com/cdh4/cdh/4/zookeeper-3.4.5-cdh4.4.0.tar.gz" },
+						"/tmp/zoo.cfg" : {  
+							"content" : {
+								"Fn::Join": [
+									"\n", [ 
+									"tickTime=2000",
+									"initLimit=10",
+									"syncLimit=5",
+									"dataDir=/var/zookeeper_snapshots",
+									"clientPort=2181"]
+									]
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+
+
+	"ImhotepLaunchConfig" : {
+		"Type" : "AWS::AutoScaling::LaunchConfiguration",
+		"Properties" : {
+			"SecurityGroups" : [ { "Ref" : "SshAccessSecurityGroup" }, "default" ],
+			"KeyName" : { "Ref" : "KeyName" },
+			"ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
+							{ "Fn::FindInMap" : [ "InstanceTypeInfo", { "Ref" : "InstanceType" },
+										"Arch" ] } 
+							] 
+					},
+			"InstanceType" : { "Ref" : "InstanceType" },
+			"UserData": {
+				"Fn::Base64": {
+					"Fn::Join": [
+						"", [
+							"#!/bin/bash -v \n",
+							"# update packages \n",
+							"yum update -y",
+							"\n\n",
+							"# format and mount the instance storage \n",
+							"umount /media/ephemeral0/ \n",
+							"mkfs.ext4 -N 1000000 -m 1 -O dir_index,extent,sparse_super /dev/xvdb \n",
+							"mkdir /var/data \n",
+							"mount -t ext4 /dev/xvdb /var/data \n",
+							"\n\n",
+							"# create directories \n",
+							"mkdir /opt/imhotep \n",
+							"mkdir /var/data/indexes \n",
+							"mkdir /var/data/imhotep \n",
+							"mkdir /var/data/imhotep/logs \n",
+							"chmod a+rw /var/data/imhotep \n",
+							"\n\n",
+							"# create users \n",
+							"useradd -r imhotep \n",
+							"\n\n",
+							"# Run cloud formation init script \n",
+							"/opt/aws/bin/cfn-init -s ", 
+							{ "Ref" : "AWS::StackName" },
+							"    -r ImhotepLaunchConfig ",
+							"    --region ", 
+							{ "Ref" : "AWS::Region" }, 
+							"\n\n",
+							"# download the setup and config files \n",
+							"cd /var/data \n",
+							"git clone https://github.com/indeedeng/imhotep-aws-config.git \n",
+							"cd imhotep-aws-config/imhotep \n",
+							"\n\n",
+							"# run the setup script \n",
+							"./setup.sh \n",
+							"\n\n",
+							"# build imhotep \n",
+							"./build.sh \n",
+							"\n\n",
+							"# start supervisor \n",
+							"service supervisor start \n",
+							"\n\n"
+						]
+					]
+				}
+			}
+		},
+		"Metadata" : {
+			"AWS::CloudFormation::Authentication" : {
+				"imhotepExecutables" : {
+					"type" : "S3",
+					"accessKeyId" : { "Ref" : "CfnKeys" },
+					"secretKey" : {"Fn::GetAtt" : ["CfnKeys", "SecretAccessKey"]},
+					"buckets" : [ { "Ref" : "DownloadBucket" } ]
+				},
+				"s3data" : {
+					"type" : "S3",
+					"accessKeyId" : { "Ref" : "CfnKeys" },
+					"secretKey" : {"Fn::GetAtt" : ["CfnKeys", "SecretAccessKey"]},
+					"buckets" : [ { "Ref" : "IndexBucket" } ]
+				}
+			},
+			"AWS::CloudFormation::Init" : {
+				"config" : {
+					"packages" : {
+						"yum" : { "git" : []}
+					},
+					"files" : {
+						"/tmp/imhotep-server-1.0.3-SNAPSHOT-complete.tar.gz" : {
+							"source" : {
+								"Fn::Join" : [
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "imhotep-server-1.0.3-SNAPSHOT-complete.tar.gz" ]
+								]
+							},
+							"authentication" : "imhotepExecutables"
+						},
+						"/opt/imhotep/imhotep.sh" : {
+							"content" : { "Fn::Join" : [ 
+								" ", [
+									"#!/bin/bash",
+									"\n\n",
+									"export CLASSPATH=\"/opt/imhotep/imhotep-server/lib/*:\"$CLASSPATH",
+									"\n\n",
+									"java",
+									{ "Fn::Join" : [ "", [
+												"-Xmx", 
+												{ "Fn::FindInMap" : [ 
+														"InstanceTypeInfo", 
+														{ "Ref" : "InstanceType" }, 
+														"MaxInstanceHeap" 
+														] 
+												},
+												"G" 
+												] 
+											] 
+									},
+									"-Dlog4j.configuration=file:///opt/imhotep/log4j.xml",
+									"com.indeed.imhotep.service.ImhotepDaemon",
+									"/var/data/indexes/",
+									"/var/tempFS",
+									"--port 12345",
+									"--memory",
+									"$(( ",
+									{ "Fn::FindInMap" : [ 
+											"InstanceTypeInfo", 
+											{ "Ref" : "InstanceType" }, 
+											"MaxInstanceHeap" 
+											] 
+									},
+									" * 1024 - 512 ))",
+									"--zknodes",
+									{ "Fn::Join" : [ ":", [ { "Fn::GetAtt" : ["ZookeeperInstance", "PrivateIp"] }, "2181" ] ] },
+									"--zkpath /imhotep/daemons",
+									"--lazyLoadProps /opt/imhotep/imhotep-caching.yaml",
+									"\n\n"
+									]
+								]
+							},
+							"mode" : "0755",
+							"owner" : "imhotep",
+							"group" : "imhotep"
+						},
+						"/opt/imhotep/imhotep-debug.sh" : {
+							"content" : { "Fn::Join" : [ 
+								" ", [
+									"#!/bin/bash",
+									"\n\n",
+									"export CLASSPATH=\"/opt/imhotep/imhotep-server/lib/*:\"$CLASSPATH",
+									"\n\n",
+									"java",
+									{ "Fn::Join" : [ "", [
+												"-Xmx", 
+												{ "Fn::FindInMap" : [ 
+														"InstanceTypeInfo", 
+														{ "Ref" : "InstanceType" }, 
+														"MaxInstanceHeap" 
+														] 
+												},
+												"G" 
+												] 
+											] 
+									},
+									"-Dlog4j.configuration=file:///opt/imhotep/log4j.xml",
+									"-agentlib:jdwp=transport=dt_socket,address=localhost:9009,server=y,suspend=y",
+									"com.indeed.imhotep.service.ImhotepDaemon",
+									"/var/data/indexes/",
+									"/var/tempFS",
+									"--port 12345",
+									"--memory",
+									"$(( ",
+									{ "Fn::FindInMap" : [ 
+											"InstanceTypeInfo", 
+											{ "Ref" : "InstanceType" }, 
+											"MaxInstanceHeap" 
+											] 
+									},
+									" * 1024 - 512 ))",
+									"--zknodes",
+									{ "Fn::Join" : [ ":", [ { "Fn::GetAtt" : ["ZookeeperInstance", "PrivateIp"] }, "2181" ] ] },
+									"--zkpath /imhotep/daemons",
+									"--lazyLoadProps /opt/imhotep/imhotep-caching.yaml",
+									"\n\n"
+									]
+								]
+							},
+							"mode" : "0755",
+							"owner" : "imhotep",
+							"group" : "imhotep"
+						},
+						"/opt/imhotep/imhotep-caching.yaml" : {
+							"content" : { "Fn::Join" : [ 
+								"", [
+									"--- \n",
+									"-   type: S3 \n",
+										"    order: 2 \n",
+									"    mountpoint: / \n",
+									"    s3-bucket: ",
+									{ "Ref" : "IndexBucket" },
+									"\n",
+									"    s3-key: ",
+									{ "Ref" : "CfnKeys" },
+									"\n",
+									"    s3-secret: ",
+									{"Fn::GetAtt" : ["CfnKeys", "SecretAccessKey"]},
+									"\n",
+									"-   type: SQAR_AUTOMOUNTING \n",
+									"    order: 4 \n",
+									"    mountpoint: / \n",
+									"-   type: CACHED \n",
+									"    order: 6 \n",
+									"    mountpoint: / \n",
+									"    cache-dir: /var/data/file_cache \n",
+									"    cacheSizeMB: ",
+									{ "Fn::FindInMap" : [ "InstanceTypeInfo", { "Ref" : "InstanceType" }, "MaxInstancePartitionSize" ] },
+									"\n\n"
+									]
+								]
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+
+
+	"ImhotepAutoScalingGroup" : {
+		"Type" : "AWS::AutoScaling::AutoScalingGroup",
+		"DependsOn" : "ZookeeperInstance",
+		"Properties" : {
+			"AvailabilityZones" : [ "us-west-2b" ],
+			"LaunchConfigurationName" : { "Ref" : "ImhotepLaunchConfig" },
+			"DesiredCapacity" : { "Ref" : "NumImhotepInstances" },
+			"MaxSize" : { "Ref" : "NumImhotepInstances" },
+			"MinSize" : { "Ref" : "NumImhotepInstances" },
+			"Tags" : [ {
+				"Key" : "Name",
+				"Value" : "Imhotep Server",
+				"PropagateAtLaunch" : "true"
+			} ]
+		}
+	},
+
+
+	"FrontEndInstance" : {
+		"Type" : "AWS::EC2::Instance",
+		"DependsOn" : "ImhotepAutoScalingGroup",
+		"Properties" : {
+			"SecurityGroups" : [ { "Ref" : "FrontEndSecurityGroup" }, { "Ref" : "SshAccessSecurityGroup" }, "default" ],
+			"KeyName" : { "Ref" : "KeyName" },
+			"ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
+											  { "Fn::FindInMap" : [ "InstanceTypeInfo", "r3.xlarge", "Arch" ] } 
+						] },
+			"InstanceType" : "r3.xlarge",
+			"Tags" : [ {
+				"Key" : "Name",
+				"Value" : "IQL Web Client / TSV Upload Server"
+			} ],
+			"UserData": {
+				"Fn::Base64": {
+					"Fn::Join": [
+						"", [
+							"#!/bin/bash -v \n",
+							"# update packages \n",
+							"yum update -y \n",
+							"\n",
+							"# create users \n",
+							"useradd shardbuilder \n",
+							"\n\n",
+							"/opt/aws/bin/cfn-init -s ", 
+							{ "Ref" : "AWS::StackName" },
+							"    -r FrontEndInstance ",
+							"    --region ", 
+							{ "Ref" : "AWS::Region" }, 
+							"\n",
+							"# format and mount the instance storage \n",
+							"umount /media/ephemeral0/ \n",
+							"mkfs.ext4 -m 1 -O dir_index,extent,sparse_super /dev/xvdb \n",
+							"mkdir /var/data \n",
+							"mount -t ext4 /dev/xvdb /var/data \n",
+							"\n",
+							"# download the oracle java 7 rpm \n",
+							"wget --no-cookies --no-check-certificate ",
+							"    --header 'Cookie: oraclelicense=accept-securebackup-cookie' ",
+							"    'http://download.oracle.com/otn-pub/java/jdk/7u55-b13/jdk-7u55-linux-x64.rpm'",
+							"\n\n",
+							"yum localinstall -y jdk-7u55-linux-x64.rpm",
+							"\n\n",
+							"# update java alternatives \n",
+							"alternatives --install /usr/bin/java java /usr/java/jdk1.7.0_55/jre/bin/java 20000 ",
+							"         --slave /usr/bin/keytool keytool /usr/java/jdk1.7.0_55/jre/bin/keytool ",
+							"         --slave /usr/bin/orbd orbd /usr/java/jdk1.7.0_55/jre/bin/orbd ",
+							"         --slave /usr/bin/pack2000 pack2000 /usr/java/jdk1.7.0_55/jre/bin/pack200 ",
+							"         --slave /usr/bin/rmid rmid /usr/java/jdk1.7.0_55/jre/bin/rmid ",
+							"         --slave /usr/bin/rmiregistry rmiregistry /usr/java/jdk1.7.0_55/jre/bin/rmiregistry ",
+							"         --slave /usr/bin/servertool servertool /usr/java/jdk1.7.0_55/jre/bin/servertool ",
+							"         --slave /usr/bin/tnameserv tnameserv /usr/java/jdk1.7.0_55/jre/bin/tnameserv ",
+							"         --slave /usr/bin/unpack2000 unpack2000 /usr/java/jdk1.7.0_55/jre/bin/unpack200",
+							"\n\n",
+							"# download the setup and config files \n",
+							"cd /var/data \n",
+							"git clone https://github.com/indeedeng/imhotep-aws-config.git \n",
+							"cd imhotep-aws-config/iql \n",
+							"cat crontab >> /etc/crontab \n",
+							"cp catalina.properties /etc/tomcat7 \n",
+							"cd /var/data/imhotep-aws-config/iupload \n",
+							"cp server.xml /etc/tomcat7 \n",
+							"\n\n",
+							"# unpack imhotep shard builder \n",
+							"cd /opt/imhotepShardBuilder \n",
+							"chown shardbuilder /opt/imhotepShardBuilder \n",
+							"tar xzf imhotepShardBuilder.tar.gz \n",
+							"ln -s /opt/imhotepShardBuilder/imhotep-tsv-builder-*-SNAPSHOT /opt/imhotepShardBuilder/shardBuilder \n",
+							"mkdir /opt/imhotepShardBuilder/conf \n",
+							"chown shardbuilder /opt/imhotepShardBuilder/conf \n",
+							"cp /opt/tomcat_shared/core-site.xml /opt/imhotepShardBuilder/conf \n",
+							"mkdir /opt/imhotepShardBuilder/logs \n",
+							"chown shardbuilder /opt/imhotepShardBuilder/logs \n",
+							"mkdir /var/data/build \n",
+							"chmod go+w /var/data/build \n",
+							"\n\n",
+							"# prep for iql \n",
+							"mkdir -p /var/data/iql/ramses_metadata \n",
+							"chmod go+w /var/data/ \n",
+							"chmod go+w /var/data/iql/ \n",
+							"chmod go+w /var/data/iql/ramses_metadata \n",
+							"mkdir -p /var/data/iql/local_cache \n",
+							"chmod go+w /var/data/iql/local_cache \n",
+							"cp /opt/iql/iql.war /var/lib/tomcat7/webapps/ \n",
+							"\n",
+							"# prep for iupload \n",
+							"cp /opt/iupload/iupload.war /var/lib/tomcat7/webapps/ \n",
+							"\n",
+							"# create hdfs tmp dir \n",
+							"mkdir -p /var/data/hdfs-tmp/s3 \n",
+							"chmod go+w /var/data/hdfs-tmp \n",
+							"chmod go+w /var/data/hdfs-tmp/s3 \n",
+							"\n",
+							"# Start tomcat \n",
+							"service tomcat7 start \n",
+							"\n"
+						]
+					]
+				}
+			}
+		},
+		"Metadata" : {
+			"AWS::CloudFormation::Authentication" : {
+				"imhotepExecutables" : {
+					"type" : "S3",
+					"accessKeyId" : { "Ref" : "CfnKeys" },
+					"secretKey" : {"Fn::GetAtt" : ["CfnKeys", "SecretAccessKey"]},
+					"buckets" : [ { "Ref" : "DownloadBucket" } ]
+				},
+				"s3data" : {
+					"type" : "S3",
+					"accessKeyId" : { "Ref" : "CfnKeys" },
+					"secretKey" : {"Fn::GetAtt" : ["CfnKeys", "SecretAccessKey"]},
+					"buckets" : [ { "Ref" : "IndexBucket" } ]
+				}
+			},
+			"AWS::CloudFormation::Init" : {
+				"config" : {
+					"packages" : { "yum" : { "git" : [], "tomcat7" : []} },
+					"files" : {
+						"/opt/iql/iql.war" : {
+							"source" : {
+								"Fn::Join" : [
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "iql.war" ]
+								]
+							},
+							"authentication" : "imhotepExecutables"
+						},
+						"/opt/iupload/iupload.war" : {
+							"source" : {
+								"Fn::Join" : [
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "iupload.war" ]
+								]
+							},
+							"authentication" : "imhotepExecutables"
+						},
+						"/opt/imhotepShardBuilder/imhotepShardBuilder.tar.gz" : {
+							"source" : {
+								"Fn::Join" : [
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "imhotep-tsv-builder-1.0.0-SNAPSHOT-complete.tar.gz" ]
+								]
+							},
+							"authentication" : "imhotepExecutables"
+						},
+						"/tmp/zookeeper.ip" : {
+							"content" : { "Fn::GetAtt" : ["ZookeeperInstance", "PrivateIp"] }
+						},
+						"/etc/tomcat7/iql.properties" : {
+							"content" : { "Fn::Join" : [ 
+								"\n", [
+									{ "Fn::Join" : [ "", 
+										[
+											"imhotep.daemons.zookeeper.quorum=", 
+											{ "Fn::GetAtt" : ["ZookeeperInstance", "PrivateIp"] } ] 
+										] 
+									},
+									"imhotep.daemons.zookeeper.path=/imhotep/daemons",
+									"imhotep.daemons.host=",
+									"",
+									"imhotep.daemons.interactive.zookeeper.quorum=",
+									"imhotep.daemons.interactive.zookeeper.path=",
+									"imhotep.daemons.interactive.host=",
+									"",
+									"ramses.metadata.dir=/var/data/iql/ramses_metadata",
+
+									"query.cache.enabled=true",
+									"query.cache.backend=S3",
+									{ "Fn::Join" : [ "", ["query.cache.s3.bucket=", { "Ref" : "CacheBucket" } ] ] },
+
+									"topterms.cache.dir=/var/data/iql/local_cache",
+									"user.concurrent.query.limit=2",
+									"row.limit=1000000",
+									""
+									]
+								]
+							}
+						},
+						"/opt/imhotepShardBuilder/shardBuilder.sh" : {
+							"content" : { "Fn::Join" : [ 
+								" ", [
+									"#!/bin/bash",
+									"\n\n",
+									"lockfile -r 0 /tmp/shardBuilder.lock || exit 1",
+									"\n\n",
+									"export CLASSPATH=\"/opt/imhotepShardBuilder/shardBuilder/lib/*:/opt/imhotepShardBuilder/conf:\"$CLASSPATH",
+									"\n\n",
+									"java",
+									{ "Fn::Join" : [ "", [
+												"-Xmx", 
+												{ "Fn::FindInMap" : [ 
+														"InstanceTypeInfo", 
+														"r3.xlarge", 
+														"MaxInstanceHeap" 
+														] 
+												},
+												"G" 
+												] 
+											] 
+									},
+									"com.indeed.imhotep.builder.tsv.TsvConverter",
+									"--index-loc",
+									{ "Fn::Join" : [ "", [ "s3n://", { "Ref" : "BuildBucket" }, "/iupload/tsvtoindex" ] ] },
+									"--success-loc",
+									{ "Fn::Join" : [ "", [ "s3n://", { "Ref" : "BuildBucket" }, "/iupload/indexedtsv" ] ] },
+									"--failure-loc",
+									{ "Fn::Join" : [ "", [ "s3n://", { "Ref" : "BuildBucket" }, "/iupload/failed" ] ] },
+									"--data-loc",
+									{ "Fn::Join" : [ "", [ "s3n://", { "Ref" : "IndexBucket" }, "/" ] ] },
+									"--build-loc /var/data/build",
+									"\n\n",
+									"# Remove the lockfile \n",
+									"rm -f /tmp/shardBuilder.lock",
+									"\n\n"
+									]
+								]
+							},
+							"mode" : "0755",
+							"owner" : "shardbuilder",
+							"group" : "shardbuilder"
+						},
+						"/etc/tomcat7/iupload.properties" : {
+							"content" : { "Fn::Join" : [ 
+								"", [
+									"hdfs.base.path.qa=",
+									{ "Fn::Join" : [ "", [ "s3n://", { "Ref" : "BuildBucket" }, "/iuploadqa/" ] ] },
+									"\n",
+									"hdfs.base.path.prod=",
+									{ "Fn::Join" : [ "", [ "s3n://", { "Ref" : "BuildBucket" }, "/iupload/" ] ] },
+									"\n",
+									"\n",
+									"permission.provider.use.default=true",
+									"\n",
+									"use.qa.repository=false",
+									"\n\n"
+									]
+								]
+							}
+						},
+						"/opt/tomcat_shared/core-site.xml" : {
+							"content" : { "Fn::Join" : [ 
+								"\n", [
+									"<?xml version=\"1.0\"?>",
+									"<?xml-stylesheet type=\"text/xsl\" href=\"configuration.xsl\"?>",
+									"",
+									"<configuration>",
+									"          <property>",
+									"              <name>hadoop.tmp.dir</name>",
+									"              <value>/var/data/hdfs-tmp</value>",
+									"          </property>",
+									"",
+									"          <property>",
+									"              <name>fs.s3n.awsAccessKeyId</name>",
+									{ "Fn::Join" : [ "", [ "              <value>", { "Ref" : "CfnKeys" }, "</value>" ] ] },
+									"          </property>",
+									"",
+									"          <property>",
+									"              <name>fs.s3n.awsSecretAccessKey</name>",
+									{ "Fn::Join" : [ "", [ "              <value>", {"Fn::GetAtt" : ["CfnKeys", "SecretAccessKey"]}, "</value>" ] ] },
+									"          </property>",
+									"",
+									"          <property>",
+									"              <!-- config valid for clientserver-->",
+									"              <name>fs.defaultFS</name>",
+									"              <value>file:///opt/iupload/</value>",
+									"              <final>true</final>",
+									"          </property>",
+									"          <property>",
+									"              <!-- config valid for clientserver-->",
+									"              <name>io.compression.codec.lzo.class</name>",
+									"              <value>com.hadoop.compression.lzo.LzoCodec</value>",
+									"          </property>",
+									"          <property>",
+									"              <!-- config valid for clientserver-->",
+									"              <name>io.compression.codecs</name>",
+									"              <value>",
+									"                 org.apache.hadoop.io.compress.DefaultCodec,",
+									"                 org.apache.hadoop.io.compress.GzipCodec,",
+									"                 org.apache.hadoop.io.compress.BZip2Codec,",
+									"                 com.hadoop.compression.lzo.LzoCodec,",
+									"                 com.hadoop.compression.lzo.LzopCodec,",
+									"                 org.apache.hadoop.io.compress.SnappyCodec,",
+									"                 com.hadoop.compression.lzo.LzoCodec,",
+									"                 com.hadoop.compression.lzo.LzopCodec",
+									"              </value>",
+									"          </property>",
+									"",
+									"</configuration>",
+									""
+									]
+								]
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+
+	"SshAccessSecurityGroup" : {
+	  "Type" : "AWS::EC2::SecurityGroup",
+	  "Properties" : {
+		"GroupDescription" : "Enable SSH access on the inbound port",
+		"SecurityGroupIngress" : [ {
+		  "IpProtocol" : "tcp",
+		  "FromPort" : "22",
+		  "ToPort" : "22",
+		  "CidrIp" : { "Ref" : "IPrange" }
+		} ]
+	  }
+	},
+
+	"FrontEndSecurityGroup" : {
+	  "Type" : "AWS::EC2::SecurityGroup",
+	  "Properties" : {
+		"GroupDescription" : "Enable port 8080 access on the inbound port",
+		"SecurityGroupIngress" : [ {
+		  "IpProtocol" : "tcp",
+		  "FromPort" : "8080",
+		  "ToPort" : "8080",
+		  "CidrIp" : { "Ref" : "IPrange" }
+		} ]
+	  }
+	}
+  },
+
+
+  "Outputs" : {
+	"iqlUrl" : { "Value" : { "Fn::Join" : [ "", [ "http://", { "Fn::GetAtt" : ["FrontEndInstance", "PublicDnsName"] }, ":8080/iql" ] ] } },
+	"tsvUploaderUrl" : { "Value" : { "Fn::Join" : [ "", [ "http://", { "Fn::GetAtt" : ["FrontEndInstance", "PublicDnsName"] }, ":8080/iupload" ] ] } },
+	"IamUserName" : { "Value" : { "Ref" : "CfnUser" } }
+  }
+
+}
+
