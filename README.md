@@ -1,4 +1,4 @@
-Imhotep Cloudformation
+imhotep-cloudformation
 =======
 Cloudformation scripts and other helper scripts for spinning up an Imhotep cluster in AWS.
 
