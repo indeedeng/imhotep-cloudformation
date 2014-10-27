@@ -40,8 +40,8 @@
 	  "ConstraintDescription" : "can contain only ASCII characters."
 	},
 
-	"IndexBucket" : {
-	  "Description" : "Bucket containing imhotep indexes",
+	"DataBucket" : {
+	  "Description" : "Where Imhotep stores its data and indexes",
 	  "Type" : "String"
 	},
 
@@ -110,6 +110,17 @@
 		"ap-sydney"	: { "64HVM" : "ami-174bd32d", "64" : "ami-094bd333" },
 		"ap-tokyo"	: { "64HVM" : "ami-07562f06", "64" : "ami-c1562fc0" },
 		"sa-east-1"	: { "64HVM" : "ami-ff5cfee2", "64" : "ami-4d5dff50" }
+	 },
+
+  	 "RegionToAZ" : {
+		"us-east-1"	: { "AZ" : ["us-east-1c", "us-east-1d"] },
+		"us-west-2"	: { "AZ" : ["us-west-2a", "us-west-2b", "us-west-2c"] },
+		"us-west-1"	: { "AZ" : ["us-west-1a", "us-west-1b"] },
+		"eu-west-1"	: { "AZ" : ["eu-west-1a", "eu-west-1b", "eu-west-1c"] },
+		"ap-singapore"	: { "AZ" : ["ap-southeast-1a", "ap-southeast-1b"] },
+		"ap-sydney"	: { "AZ" : ["ap-southeast-2a", "ap-southeast-2b"] },
+		"ap-tokyo"	: { "AZ" : ["ap-northeast-1a", "ap-northeast-1c"] },
+		"sa-east-1"	: { "AZ" : ["sa-east-1a", "sa-east-1b"] }
 	 }
   },
 
@@ -133,7 +144,7 @@
 									"s3:DeleteObject"
 								],
 								"Resource": [
-									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "IndexBucket" }, "/*"]]}
+									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "DataBucket" }, "/*"]]}
 								]
 							},
 							{
@@ -142,7 +153,7 @@
 									"s3:ListBucket"
 								],
 								"Resource": [
-									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "IndexBucket" }]]}
+									{ "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "DataBucket" }]]}
 								]
 							},
 							{
@@ -355,7 +366,11 @@
 							"mkdir /var/data/indexes \n",
 							"mkdir /var/data/imhotep \n",
 							"mkdir /var/data/imhotep/logs \n",
+							"mkdir /var/data/imhotep/tmp \n",
 							"chmod a+rw /var/data/imhotep \n",
+							"chmod a+rw /var/data/indexes \n",
+							"chmod a+rw /var/data/imhotep/logs \n",
+							"chmod a+rw /var/data/imhotep/tmp \n",
 							"\n\n",
 							"# create users \n",
 							"useradd -r imhotep \n",
@@ -398,7 +413,7 @@
 					"type" : "S3",
 					"accessKeyId" : { "Ref" : "CfnKeys" },
 					"secretKey" : {"Fn::GetAtt" : ["CfnKeys", "SecretAccessKey"]},
-					"buckets" : [ { "Ref" : "IndexBucket" } ]
+					"buckets" : [ { "Ref" : "DataBucket" } ]
 				}
 			},
 			"AWS::CloudFormation::Init" : {
@@ -436,6 +451,7 @@
 											] 
 									},
 									"-Dlog4j.configuration=file:///opt/imhotep/log4j.xml",
+									"-Djava.io.tmpdir=/var/data/imhotep/tmp",
 									"com.indeed.imhotep.service.ImhotepDaemon",
 									"/var/data/indexes/",
 									"/var/tempFS",
@@ -482,6 +498,7 @@
 											] 
 									},
 									"-Dlog4j.configuration=file:///opt/imhotep/log4j.xml",
+									"-Djava.io.tmpdir=/var/data/imhotep/tmp",
 									"-agentlib:jdwp=transport=dt_socket,address=localhost:9009,server=y,suspend=y",
 									"com.indeed.imhotep.service.ImhotepDaemon",
 									"/var/data/indexes/",
@@ -516,7 +533,7 @@
 										"    order: 2 \n",
 									"    mountpoint: / \n",
 									"    s3-bucket: ",
-									{ "Ref" : "IndexBucket" },
+									{ "Ref" : "DataBucket" },
 									"\n",
 									"    s3-key: ",
 									{ "Ref" : "CfnKeys" },
@@ -549,7 +566,7 @@
 		"Type" : "AWS::AutoScaling::AutoScalingGroup",
 		"DependsOn" : "ZookeeperInstance",
 		"Properties" : {
-			"AvailabilityZones" : [ "us-west-2b" ],
+			"AvailabilityZones" : { "Fn::FindInMap" : [ "RegionToAZ", { "Ref" : "AWS::Region" }, "AZ" ] },
 			"LaunchConfigurationName" : { "Ref" : "ImhotepLaunchConfig" },
 			"DesiredCapacity" : { "Ref" : "NumImhotepInstances" },
 			"MaxSize" : { "Ref" : "NumImhotepInstances" },
@@ -642,6 +659,9 @@
 							"cd /var/data/imhotep-cloudformation/iupload \n",
 							"cp server.xml /etc/tomcat7 \n",
 							"\n\n",
+							"# redirect traffic on port 80 to 8080 \n",
+							"iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080",
+							"\n\n",
 							"# unpack imhotep tsv converter \n",
 							"cd /opt/imhotepTsvConverter \n",
 							"chown shardbuilder /opt/imhotepTsvConverter \n",
@@ -660,9 +680,15 @@
 							"chmod go+w /var/data/ \n",
 							"chmod go+w /var/data/iql/ \n",
 							"chmod go+w /var/data/iql/ramses_metadata \n",
+							"mkdir -p /var/data/tomcat7/temp \n",
+							"chmod go+w /var/data/tomcat7 \n",
+							"chmod go+w /var/data/tomcat7/temp \n",
 							"mkdir -p /var/data/iql/local_cache \n",
 							"chmod go+w /var/data/iql/local_cache \n",
 							"cp /opt/iql/iql.war /var/lib/tomcat7/webapps/ \n",
+							"\n",
+							"# Change the catalina temp dir in tomcat.conf \n",
+							"sed -i 's/^CATALINA_TMPDIR=.*/CATALINA_TMPDIR=\\\"\\/var\\/data\\/tomcat7\\/temp\\\"/' /etc/tomcat7/tomcat7.conf",
 							"\n",
 							"# prep for iupload \n",
 							"cp /opt/iupload/iupload.war /var/lib/tomcat7/webapps/ \n",
@@ -692,7 +718,7 @@
 					"type" : "S3",
 					"accessKeyId" : { "Ref" : "CfnKeys" },
 					"secretKey" : {"Fn::GetAtt" : ["CfnKeys", "SecretAccessKey"]},
-					"buckets" : [ { "Ref" : "IndexBucket" } ]
+					"buckets" : [ { "Ref" : "DataBucket" } ]
 				}
 			},
 			"AWS::CloudFormation::Init" : {
@@ -747,6 +773,8 @@
 									"query.cache.enabled=true",
 									"query.cache.backend=S3",
 									{ "Fn::Join" : [ "", ["query.cache.s3.bucket=", { "Ref" : "CacheBucket" } ] ] },
+									{ "Fn::Join" : [ "", ["query.cache.s3.s3key=", { "Ref" : "CfnKeys" } ] ] },
+									{ "Fn::Join" : [ "", ["query.cache.s3.s3secret=", {"Fn::GetAtt" : ["CfnKeys", "SecretAccessKey"]} ] ] },
 
 									"topterms.cache.dir=/var/data/iql/local_cache",
 									"user.concurrent.query.limit=2",
@@ -786,7 +814,7 @@
 									"--failure-loc",
 									{ "Fn::Join" : [ "", [ "s3n://", { "Ref" : "BuildBucket" }, "/iupload/failed" ] ] },
 									"--data-loc",
-									{ "Fn::Join" : [ "", [ "s3n://", { "Ref" : "IndexBucket" }, "/" ] ] },
+									{ "Fn::Join" : [ "", [ "s3n://", { "Ref" : "DataBucket" }, "/" ] ] },
 									"--build-loc /var/data/build",
 									"\n\n",
 									"# Remove the lockfile \n",
@@ -884,7 +912,7 @@
 			"CacheBucket"
 		],
 		"Properties" : {
-			"AvailabilityZones" : [ "us-west-2b" ],
+			"AvailabilityZones" : { "Fn::FindInMap" : [ "RegionToAZ", { "Ref" : "AWS::Region" }, "AZ" ] },
 			"LaunchConfigurationName" : { "Ref" : "FrontEndConfig" },
 			"DesiredCapacity" : "1",
 			"MaxSize" : "1",
@@ -906,7 +934,7 @@
 		  "IpProtocol" : "tcp",
 		  "FromPort" : "22",
 		  "ToPort" : "22",
-		  "CidrIp" : { "Ref" : "IPrange" }
+		  "CidrIp" : { "Ref" : "SSHLocation" }
 		} ]
 	  }
 	},
@@ -914,11 +942,11 @@
 	"FrontEndSecurityGroup" : {
 	  "Type" : "AWS::EC2::SecurityGroup",
 	  "Properties" : {
-		"GroupDescription" : "Enable port 8080 access on the inbound port",
+		"GroupDescription" : "Enable port 80 access on the inbound port",
 		"SecurityGroupIngress" : [ {
 		  "IpProtocol" : "tcp",
-		  "FromPort" : "8080",
-		  "ToPort" : "8080",
+		  "FromPort" : "80",
+		  "ToPort" : "80",
 		  "CidrIp" : { "Ref" : "IPrange" }
 		} ]
 	  }
@@ -927,8 +955,8 @@
   },
 
   "Outputs" : {
-	"iqlUrl" : { "Value" : { "Fn::Join" : [ "", [ "http://", { "Ref" : "FrontEndEip" }, ":8080/iql" ] ] } },
-	"tsvUploaderUrl" : { "Value" : { "Fn::Join" : [ "", [ "http://", { "Ref" : "FrontEndEip" }, ":8080/iupload" ] ] } },
+	"iqlUrl" : { "Value" : { "Fn::Join" : [ "", [ "http://", { "Ref" : "FrontEndEip" }, "/iql" ] ] } },
+	"tsvUploaderUrl" : { "Value" : { "Fn::Join" : [ "", [ "http://", { "Ref" : "FrontEndEip" }, "/iupload" ] ] } },
 	"IamUserName" : { "Value" : { "Ref" : "CfnUser" } }
   }
 
