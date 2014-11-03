@@ -237,9 +237,14 @@
 	"CacheBucket": {
 		"Type": "AWS::S3::Bucket",
 		"Properties": {
-			"AccessControl": "Private"
+			"AccessControl": "Private",
+			"LifecycleConfiguration" : {
+				"Rules" : [
+					{ "ExpirationInDays" : "1", "Status" : "Enabled" }
+				]
+			}
 		},
-		"DeletionPolicy" : "Delete"
+		"DeletionPolicy" : "Retain"
 	},
 
 
