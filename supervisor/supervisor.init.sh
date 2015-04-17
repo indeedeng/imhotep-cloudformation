@@ -24,7 +24,7 @@
 
 set -a
 
-PREFIX=/usr
+PREFIX=/usr/local
 
 SUPERVISORD=$PREFIX/bin/supervisord
 SUPERVISORCTL=$PREFIX/bin/supervisorctl
