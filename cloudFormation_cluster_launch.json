@@ -53,7 +53,7 @@
 	"DownloadBucket" : {
 	  "Description" : "Bucket containing imhotep jars. Indeed provided jars are in \"indeed-imhotep-downloads\".",
 	  "Type" : "String",
-	  "Default" : "indeed-imhotep-downloads"
+	  "Default" : "jack-imhotep-test"
 	},
 
 	"IPrange": {
