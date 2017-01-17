@@ -801,7 +801,12 @@
 									"topterms.cache.dir=/var/data/iql/local_cache",
 									"user.concurrent.query.limit=2",
 									"row.limit=1000000",
-									""
+									"",
+                                                                        "shortlink.enabled=true",
+                                                                        "shortlink.backend=S3",
+                                                                        { "Fn::Join" : [ "", ["shortlink.s3.bucket=", { "Ref" : "DataBucket" } ] ] },
+                                                                        { "Fn::Join" : [ "", ["shortlink.s3.s3key=", { "Ref" : "CfnKeys" } ] ] },
+                                                                        { "Fn::Join" : [ "", ["shortlink.s3.s3secret=", {"Fn::GetAtt" : ["CfnKeys", "SecretAccessKey"]} ] ] }
 									]
 								]
 							}
