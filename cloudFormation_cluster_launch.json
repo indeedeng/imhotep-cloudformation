@@ -434,10 +434,10 @@
 						"yum" : { "git" : []}
 					},
 					"files" : {
-						"/tmp/imhotep-server-1.0.10-SNAPSHOT-complete.tar.gz" : {
+						"/tmp/imhotep-server-1.0.11-SNAPSHOT-complete.tar.gz" : {
 							"source" : {
 								"Fn::Join" : [
-									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "imhotep-server-1.0.10-SNAPSHOT-complete.tar.gz" ]
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "imhotep-server-1.0.11-SNAPSHOT-complete.tar.gz" ]
 								]
 							},
 							"authentication" : "imhotepExecutables"
@@ -750,7 +750,7 @@
 						"/opt/iql/iql.war" : {
 							"source" : {
 								"Fn::Join" : [
-									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "iql-1.0.5-SNAPSHOT.war" ]
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "iql-1.0.6-SNAPSHOT.war" ]
 								]
 							},
 							"authentication" : "imhotepExecutables"
@@ -758,7 +758,7 @@
 						"/opt/iupload/iupload.war" : {
 							"source" : {
 								"Fn::Join" : [
-									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "iupload-war-1.0.1-SNAPSHOT.war" ]
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "iupload-war-1.0.2-SNAPSHOT.war" ]
 								]
 							},
 							"authentication" : "imhotepExecutables"
@@ -766,7 +766,7 @@
 						"/opt/imhotepTsvConverter/imhotepTsvConverter.tar.gz" : {
 							"source" : {
 								"Fn::Join" : [
-									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "tsv-builder-1.0.0-complete.tar.gz" ]
+									"", [ "https://", { "Ref" : "DownloadBucket" }, ".s3.amazonaws.com/", "tsv-builder-1.0.1-SNAPSHOT-complete.tar.gz" ]
 								]
 							},
 							"authentication" : "imhotepExecutables"
