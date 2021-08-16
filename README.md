@@ -1,7 +1,6 @@
-imhotep-cloudformation
+Archived 8/16/21
 
-NOTE: Indeed has discontinued supporting this project. Archiving will take place on 8/16/21.
-If you are interested in taking over as the Maintainer, please contact Indeed at opensource@indeed.com
+imhotep-cloudformation
 =======
 
 ![Lifecycle](https://img.shields.io/osslifecycle/indeedeng/imhotep-cloudformation.svg)
